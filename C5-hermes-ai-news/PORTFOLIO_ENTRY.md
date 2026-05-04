@@ -5,7 +5,7 @@
 | **挑战编号** | C5 |
 | **项目名称** | Hermes AI News |
 | **达到 Level** | L3（系统级整合） |
-| **Token 消耗** | ~¥5（开发调试）+ ~¥1.5/天（运营） |
+| **Token 消耗** | ~¥5（开发调试）+ ~¥0.01/天（运营） |
 | **核心产出** | https://github.com/a976xw7td/hermes-ai-news |
 | **开发周期** | 2026-05-04 |
 | **关键技术** | Hermes Agent, DeepSeek V4 Pro, Tavily Search, feedparser, clawbot WeChat |
