@@ -4,8 +4,9 @@ AI News Fetcher for Hermes Cron
 Fetches today's AI news from multiple sources and outputs structured JSON.
 
 Sources:
-  - AI company official blogs: OpenAI, Google DeepMind, Meta, Microsoft, Anthropic,
-    NVIDIA, xAI, Mistral, Cohere
+  - English AI media: The Verge, TechCrunch, VentureBeat, Ars Technica, Wired,
+    MIT Tech Review, ZDNet
+  - HackerNews (AI-filtered via hnrss)
   - GitHub Trending (AI/ML repos)
   - Chinese media: 机器之心, 量子位
 
@@ -43,26 +44,32 @@ _SSL_CONTEXT.verify_mode = ssl.CERT_NONE  # for broken SSL on some Chinese sites
 # ── Sources ──────────────────────────────────────────────────────────────────
 
 RSS_FEEDS = {
-    # ── AI company official blogs ──
-    "OpenAI": "https://openai.com/blog/rss.xml",
-    "Google DeepMind": "https://blog.google/technology/ai/rss/",
-    "Meta AI": "https://about.fb.com/news/category/artificial-intelligence/feed/",
-    "Microsoft AI": "https://blogs.microsoft.com/ai/feed/",
-    "Anthropic": "https://www.anthropic.com/blog/rss.xml",
-    "NVIDIA AI": "https://blogs.nvidia.com/feed/",
-    "xAI": "https://x.ai/blog/rss.xml",
-    "Mistral": "https://mistral.ai/news/rss.xml",
-    "Cohere": "https://cohere.com/blog/rss",
+    # ── English AI media (daily updates) ──
+    "The Verge - AI": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
+    "TechCrunch - AI": "https://techcrunch.com/category/artificial-intelligence/feed/",
+    "VentureBeat - AI": "https://feeds.feedburner.com/venturebeat/SZYF",
+    "Ars Technica - AI": "https://arstechnica.com/ai/feed/",
+    "Wired - AI": "https://www.wired.com/feed/tag/ai/latest/rss",
+    "MIT Tech Review": "https://www.technologyreview.com/feed/rss/",
+    "ZDNet - AI": "https://www.zdnet.com/topic/artificial-intelligence/rss.xml",
+
+    # ── HackerNews (AI-filtered, scored ≥ 10) ──
+    "HN - AI": (
+        "https://hnrss.org/frontpage?"
+        "q=AI+OR+LLM+OR+GPT+OR+Claude+OR+OpenAI+OR+Gemini+OR+model+OR+GPU"
+        "&points=10"
+    ),
 
     # ── Chinese AI media ──
     "机器之心": "https://www.jiqizhixin.com/rss",
     "量子位": "https://www.qbitai.com/feed",
 }
 
-# Company blogs with standard SSL
+# English media feeds with standard SSL
 _STANDARD_FEEDS = {
-    "OpenAI", "Google DeepMind", "Meta AI", "Microsoft AI", "Anthropic",
-    "NVIDIA AI", "xAI", "Mistral", "Cohere",
+    "The Verge - AI", "TechCrunch - AI", "VentureBeat - AI",
+    "Ars Technica - AI", "Wired - AI", "MIT Tech Review", "ZDNet - AI",
+    "HN - AI",
 }
 
 # Chinese feeds may need SSL bypass

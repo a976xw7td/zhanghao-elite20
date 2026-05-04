@@ -21,12 +21,12 @@
 
 ## [0.3.0] - 2026-05-04
 
-### refactor: 替换 RSS 源为 AI 公司官方博客
+### refactor: 替换为 8 家主流英文 AI 媒体 RSS
 
-- 移除 7 个旧英文源（The Verge, TechCrunch, VentureBeat, HN, arXiv×3）
-- 新增 9 个 AI 公司官方博客 RSS：OpenAI, Google DeepMind, Meta, Microsoft, Anthropic, NVIDIA, xAI, Mistral, Cohere
-- 保留 2 个中文源（机器之心, 量子位）
-- RSS 源总数：9 → 11
+- 移除公司博客（更新频率太低，24h 窗口抓不到内容）
+- 新增：The Verge, TechCrunch, VentureBeat, Ars Technica, Wired, MIT Tech Review, ZDNet
+- 保留 Hacker News (AI 过滤) + 2 个中文源
+- RSS 源总数：10
 
 ## [0.2.1] - 2026-05-04
 

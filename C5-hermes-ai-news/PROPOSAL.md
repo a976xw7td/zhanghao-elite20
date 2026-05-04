@@ -12,7 +12,7 @@
 |------|------|------|
 | Agent 框架 | Hermes Agent (Nous Research) | 内置 cron、多平台推送、Python 脚本预处理 |
 | 消息推送 | WeChat (via clawbot/ilinkai) | AI+X 实验班通讯主渠道 |
-| 新闻源 (RSS) | OpenAI, Google DeepMind, Meta, Microsoft, Anthropic, NVIDIA, xAI, Mistral, Cohere, 机器之心, 量子位 | 9 家 AI 公司官方博客 + 2 家中文媒体 |
+| 新闻源 (RSS) | The Verge, TechCrunch, VentureBeat, Ars Technica, Wired, MIT Tech Review, ZDNet, HN, 机器之心, 量子位 | 8 家英文主流科技媒体 + 2 家中文媒体 |
 | 新闻源 (实时搜索) | Tavily Search API | 补充 RSS 覆盖盲区，搜索当天新闻 |
 | 大模型 | DeepSeek V4 Pro | 百万 Token 上下文，高性价比 |
 | 编程语言 | Python 3.10+ | |
@@ -56,7 +56,7 @@
 |------|--------|----------|----------|
 | 新闻时间窗口 | 24h | 12h / 48h | 新闻数量 vs 时效性 |
 | AI 模型 | DeepSeek V4 Pro | GPT-5 / Claude Opus 4.7 | 质量 / 成本 |
-| RSS 源数量 | 11 个 | 加减源 | 覆盖率 / 噪音比 |
+| RSS 源数量 | 10 个 | 加减源 | 覆盖率 / 噪音比 |
 | Tavily 搜索深度 | advanced | basic | 质量 / 速度 |
 | 推送时间 | 8:03 AM | 7:00 / 9:00 | 同学阅读习惯 |
 
