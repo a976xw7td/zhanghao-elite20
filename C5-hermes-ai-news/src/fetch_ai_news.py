@@ -4,11 +4,10 @@ AI News Fetcher for Hermes Cron
 Fetches today's AI news from multiple sources and outputs structured JSON.
 
 Sources:
-  - English media: The Verge AI, TechCrunch AI, VentureBeat AI
-  - HackerNews (AI-filtered via hnrs)
-  - arXiv: cs.AI, cs.CL, cs.LG (new listings each weekday)
+  - AI company official blogs: OpenAI, Google DeepMind, Meta, Microsoft, Anthropic,
+    NVIDIA, xAI, Mistral, Cohere
   - GitHub Trending (AI/ML repos)
-  - Chinese media: 机器之心, 量子位 (best-effort)
+  - Chinese media: 机器之心, 量子位
 
 Output: JSON to stdout — Hermes injects this into the agent prompt.
 """
@@ -44,33 +43,29 @@ _SSL_CONTEXT.verify_mode = ssl.CERT_NONE  # for broken SSL on some Chinese sites
 # ── Sources ──────────────────────────────────────────────────────────────────
 
 RSS_FEEDS = {
-    # ── English AI news ──
-    "The Verge - AI": "https://www.theverge.com/rss/ai-artificial-intelligence/index.xml",
-    "TechCrunch - AI": "https://techcrunch.com/category/artificial-intelligence/feed/",
-    "VentureBeat - AI": "https://feeds.feedburner.com/venturebeat/SZYF",
+    # ── AI company official blogs ──
+    "OpenAI": "https://openai.com/blog/rss.xml",
+    "Google DeepMind": "https://blog.google/technology/ai/rss/",
+    "Meta AI": "https://about.fb.com/news/category/artificial-intelligence/feed/",
+    "Microsoft AI": "https://blogs.microsoft.com/ai/feed/",
+    "Anthropic": "https://www.anthropic.com/blog/rss.xml",
+    "NVIDIA AI": "https://blogs.nvidia.com/feed/",
+    "xAI": "https://x.ai/blog/rss.xml",
+    "Mistral": "https://mistral.ai/news/rss.xml",
+    "Cohere": "https://cohere.com/blog/rss",
 
-    # ── HackerNews (AI-filtered, scored ≥ 10) ──
-    "HN - AI": (
-        "https://hnrss.org/frontpage?"
-        "q=AI+OR+LLM+OR+GPT+OR+Claude+OR+OpenAI+OR+Gemini+OR+model+OR+GPU"
-        "&points=10"
-    ),
-
-    # ── arXiv (new papers, weekdays) ──
-    "arXiv - cs.AI": "https://rss.arxiv.org/rss/cs.AI",
-    "arXiv - cs.CL": "https://rss.arxiv.org/rss/cs.CL",
-    "arXiv - cs.LG": "https://rss.arxiv.org/rss/cs.LG",
-
-    # ── Chinese AI media (may need SSL bypass / UA) ──
+    # ── Chinese AI media ──
     "机器之心": "https://www.jiqizhixin.com/rss",
     "量子位": "https://www.qbitai.com/feed",
 }
 
-# Some feeds need the browser-like UA but standard SSL
-_STANDARD_FEEDS = {"The Verge - AI", "TechCrunch - AI", "VentureBeat - AI",
-                    "HN - AI", "arXiv - cs.AI", "arXiv - cs.CL", "arXiv - cs.LG"}
+# Company blogs with standard SSL
+_STANDARD_FEEDS = {
+    "OpenAI", "Google DeepMind", "Meta AI", "Microsoft AI", "Anthropic",
+    "NVIDIA AI", "xAI", "Mistral", "Cohere",
+}
 
-# Chinese feeds need SSL bypass
+# Chinese feeds may need SSL bypass
 _LOOSE_FEEDS = {"机器之心", "量子位"}
 
 # ── GitHub Trending ──

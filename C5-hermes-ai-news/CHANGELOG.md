@@ -19,6 +19,15 @@
 - Agent 仅负责格式化排版，不再做搜索
 - 避免 Agent 搜索循环问题
 
+## [0.3.0] - 2026-05-04
+
+### refactor: 替换 RSS 源为 AI 公司官方博客
+
+- 移除 7 个旧英文源（The Verge, TechCrunch, VentureBeat, HN, arXiv×3）
+- 新增 9 个 AI 公司官方博客 RSS：OpenAI, Google DeepMind, Meta, Microsoft, Anthropic, NVIDIA, xAI, Mistral, Cohere
+- 保留 2 个中文源（机器之心, 量子位）
+- RSS 源总数：9 → 11
+
 ## [0.2.1] - 2026-05-04
 
 ### fix: 成本估算修正

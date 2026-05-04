@@ -9,7 +9,7 @@
 | feedparser | 6.0.12 | RSS/Atom feed 解析 | BSD-2-Clause | 无 |
 | httpx | latest | HTTP 客户端 | BSD-3-Clause | 添加浏览器 UA + SSL 绕过配置 |
 | Tavily Search API | v1 | 实时新闻搜索 | 商业 API | 封装为 `search_tavily()` 函数，集成到并行抓取流程 |
-| hnrss.org | - | HN AI 过滤 RSS | 免费服务 | 调整 points 阈值 |
+| 各 AI 公司官方博客 | - | OpenAI, Google, Meta, Microsoft, Anthropic, NVIDIA, xAI, Mistral, Cohere RSS | 各公司所有 | 仅读取公开 RSS，无修改 |
 | DeepSeek API | V4 Pro | 新闻编辑排版 LLM | 商业 API | 通过 Hermes custom_providers 调用 |
 
 ## 我没拿来的

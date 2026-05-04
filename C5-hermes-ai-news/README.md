@@ -50,4 +50,4 @@ hermes cron create --name "AI早报" --schedule "3 8 * * *" --script fetch-ai-ne
 - [feedparser](https://github.com/kurtmckee/feedparser) — RSS 解析
 - [Tavily](https://tavily.com) — 实时新闻搜索 API
 - [hnrss](https://hnrss.org) — HackerNews RSS 过滤
-- 复用：DeepSeek API、arXiv RSS、GitHub Trending
+- 复用：DeepSeek API、各 AI 公司官方博客 RSS
