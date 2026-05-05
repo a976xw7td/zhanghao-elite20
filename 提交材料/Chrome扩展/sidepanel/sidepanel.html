@@ -1,0 +1,332 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智引灵 AI 导航导师</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg-base:   #ffffff;
+    --bg-panel:  #f1f5f9;
+    --bg-input:  #f8fafc;
+    --border:    #e2e8f0;
+    --text:      #1e293b;
+    --text-sec:  #64748b;
+    --text-mute: #94a3b8;
+    --btn-sec:   #e2e8f0;
+  }
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg-base:   #0f172a;
+      --bg-panel:  #1e293b;
+      --bg-input:  #0f172a;
+      --border:    #334155;
+      --text:      #f8fafc;
+      --text-sec:  #94a3b8;
+      --text-mute: #475569;
+      --btn-sec:   #334155;
+    }
+  }
+
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-base);
+    color: var(--text);
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+  }
+
+  #avatar-container {
+    flex: 1;
+    min-height: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    overflow: hidden;
+  }
+
+  #avatar-glow {
+    position: absolute;
+    width: 220px;
+    height: 220px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(59,130,246,0.18) 0%, transparent 70%);
+    transition: background 0.4s;
+    pointer-events: none;
+  }
+
+  #avatar-img {
+    position: relative;
+    z-index: 1;
+    width: 75%;
+    max-width: 220px;
+    object-fit: contain;
+    filter: drop-shadow(0 6px 20px rgba(59,130,246,0.35));
+    animation: float 3s ease-in-out infinite;
+  }
+
+  @keyframes float {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-12px); }
+  }
+
+  #avatar-container.listening #avatar-img {
+    animation: listen-bob 0.7s ease-in-out infinite;
+    filter: drop-shadow(0 6px 20px rgba(245,158,11,0.5));
+  }
+  #avatar-container.listening #avatar-glow {
+    background: radial-gradient(circle, rgba(245,158,11,0.22) 0%, transparent 70%);
+    animation: glow-pulse 0.7s ease-in-out infinite;
+  }
+
+  #avatar-container.thinking #avatar-img {
+    animation: think-tilt 1.4s ease-in-out infinite;
+    filter: drop-shadow(0 6px 20px rgba(139,92,246,0.5));
+  }
+  #avatar-container.thinking #avatar-glow {
+    background: radial-gradient(circle, rgba(139,92,246,0.22) 0%, transparent 70%);
+    animation: glow-pulse 1.4s ease-in-out infinite;
+  }
+
+  #avatar-container.speaking #avatar-img {
+    animation: speak-bounce 0.45s ease-in-out infinite;
+    filter: drop-shadow(0 6px 20px rgba(16,185,129,0.5));
+  }
+  #avatar-container.speaking #avatar-glow {
+    background: radial-gradient(circle, rgba(16,185,129,0.22) 0%, transparent 70%);
+    animation: glow-pulse 0.45s ease-in-out infinite;
+  }
+
+  @keyframes listen-bob {
+    0%, 100% { transform: translateY(-6px) scale(1.02); }
+    50% { transform: translateY(-14px) scale(1.05); }
+  }
+
+  @keyframes think-tilt {
+    0%, 100% { transform: translateY(-8px) rotate(-3deg); }
+    50% { transform: translateY(-14px) rotate(3deg); }
+  }
+
+  @keyframes speak-bounce {
+    0%, 100% { transform: translateY(0) scaleY(1); }
+    40% { transform: translateY(-14px) scaleY(0.96); }
+  }
+
+  @keyframes glow-pulse {
+    0%, 100% { transform: scale(1); opacity: 0.8; }
+    50% { transform: scale(1.25); opacity: 1; }
+  }
+
+  #status-bar {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 16px;
+    background: var(--bg-panel);
+    font-size: 13px;
+    border-top: 1px solid var(--border);
+  }
+
+  #status-dot {
+    width: 8px; height: 8px;
+    border-radius: 50%;
+    background: #94a3b8;
+    transition: background 0.3s;
+  }
+  #status-dot.listening { background: #f59e0b; animation: blink 0.8s infinite; }
+  #status-dot.thinking { background: #8b5cf6; }
+  #status-dot.speaking { background: #10b981; }
+  #status-dot.idle { background: #94a3b8; }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.3; }
+  }
+
+  #status-text { flex: 1; color: var(--text-sec); }
+
+  #controls {
+    display: flex;
+    gap: 8px;
+    padding: 12px 16px;
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border);
+  }
+
+  button {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    font-size: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+
+  #mic-btn {
+    background: #3b82f6;
+    color: white;
+  }
+  #mic-btn:hover { background: #2563eb; }
+  #mic-btn.recording {
+    background: #ef4444;
+    animation: pulse-btn 1.5s infinite;
+  }
+
+  @keyframes pulse-btn {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.5); }
+    50% { box-shadow: 0 0 0 8px rgba(239, 68, 68, 0); }
+  }
+
+  #text-input {
+    flex: 2;
+    padding: 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text);
+    font-size: 14px;
+  }
+  #text-input::placeholder { color: var(--text-mute); }
+
+  #settings-row {
+    padding: 8px 16px;
+    background: var(--bg-panel);
+    border-top: 1px solid var(--border);
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    font-size: 12px;
+  }
+
+  #settings-row label { color: var(--text-sec); }
+  #settings-row input {
+    flex: 1;
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text);
+    font-size: 12px;
+  }
+
+  #settings-row select {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid var(--border);
+    background: var(--bg-input);
+    color: var(--text);
+    font-size: 12px;
+  }
+
+  #save-key-btn {
+    padding: 6px 12px;
+    background: var(--btn-sec);
+    color: var(--text);
+    border: none;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+  }
+</style>
+</head>
+<body>
+
+<div id="avatar-container" class="idle">
+  <div id="avatar-glow"></div>
+  <svg id="avatar-svg" viewBox="0 0 100 116" overflow="visible" xmlns="http://www.w3.org/2000/svg"
+       style="width:70%;max-width:200px;filter:drop-shadow(0 0 14px rgba(255,160,190,0.45));animation:sp-float 3.5s ease-in-out infinite">
+    <style>
+      @keyframes sp-float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-8px)} }
+      @keyframes sp-halo  { from{transform:rotate(0deg)} to{transform:rotate(360deg)} }
+      #sp-halo { transform-box:fill-box; transform-origin:center; animation:sp-halo 10s linear infinite; }
+    </style>
+    <defs>
+      <radialGradient id="sp-head-g" cx="38%" cy="32%" r="65%">
+        <stop offset="0%"   stop-color="#fffef8"/>
+        <stop offset="55%"  stop-color="#f8ece0"/>
+        <stop offset="100%" stop-color="#e8d0bc"/>
+      </radialGradient>
+      <radialGradient id="sp-body-g" cx="40%" cy="30%" r="65%">
+        <stop offset="0%"   stop-color="#fff4f0"/>
+        <stop offset="55%"  stop-color="#f5dcd8"/>
+        <stop offset="100%" stop-color="#e0b8b4"/>
+      </radialGradient>
+      <radialGradient id="sp-eye-g" cx="30%" cy="28%" r="66%">
+        <stop offset="0%"   stop-color="#c8f0ff"/>
+        <stop offset="50%"  stop-color="#3098d8"/>
+        <stop offset="100%" stop-color="#0860a8"/>
+      </radialGradient>
+      <radialGradient id="sp-foot-g" cx="40%" cy="35%" r="65%">
+        <stop offset="0%"   stop-color="#ffd0dc"/>
+        <stop offset="100%" stop-color="#f0a0b8"/>
+      </radialGradient>
+    </defs>
+    <ellipse cx="50" cy="32" rx="40" ry="40" fill="rgba(255,180,200,0.07)"/>
+    <g id="sp-halo">
+      <circle cx="50" cy="32" r="36" fill="none"
+              stroke="#ffb0c8" stroke-width="1.8"
+              stroke-dasharray="11 5" stroke-linecap="round" opacity="0.80"/>
+    </g>
+    <circle cx="50" cy="32" r="30" fill="url(#sp-head-g)"/>
+    <ellipse cx="41" cy="18" rx="10" ry="6" fill="rgba(255,255,255,0.50)" transform="rotate(-12,41,18)"/>
+    <ellipse cx="50" cy="34" rx="21" ry="19" fill="#fff8f0"/>
+    <ellipse cx="42" cy="31" rx="6.5" ry="7"   fill="url(#sp-eye-g)"/>
+    <circle  cx="39"   cy="28"   r="3.8" fill="rgba(255,255,255,0.92)"/>
+    <circle  cx="45.5" cy="34.5" r="1.6" fill="rgba(255,255,255,0.38)"/>
+    <ellipse cx="58" cy="31" rx="6.5" ry="7"   fill="url(#sp-eye-g)"/>
+    <circle  cx="55"   cy="28"   r="3.8" fill="rgba(255,255,255,0.92)"/>
+    <circle  cx="61.5" cy="34.5" r="1.6" fill="rgba(255,255,255,0.38)"/>
+    <ellipse cx="32" cy="37" rx="7" ry="4.5" fill="#ffb8c8" opacity="0.75"/>
+    <ellipse cx="68" cy="37" rx="7" ry="4.5" fill="#ffb8c8" opacity="0.75"/>
+    <path d="M 44,44 Q 50,49 56,44" fill="none" stroke="#d08878" stroke-width="1.7" stroke-linecap="round"/>
+    <path d="M 39,62 C 28,64 14,70 14,82 C 14,95 26,104 50,104
+             C 74,104 86,95 86,82 C 86,70 72,64 61,62 Z"
+          fill="url(#sp-body-g)"/>
+    <ellipse cx="44" cy="80" rx="11" ry="13" fill="rgba(255,255,255,0.30)"/>
+    <ellipse cx="9"  cy="76" rx="13" ry="8" fill="url(#sp-body-g)" transform="rotate(-22,9,76)"/>
+    <ellipse cx="91" cy="76" rx="13" ry="8" fill="url(#sp-body-g)" transform="rotate(22,91,76)"/>
+    <ellipse cx="37" cy="110" rx="13" ry="8" fill="url(#sp-foot-g)"/>
+    <ellipse cx="63" cy="110" rx="13" ry="8" fill="url(#sp-foot-g)"/>
+    <ellipse cx="34" cy="107" rx="5"  ry="3" fill="rgba(255,255,255,0.40)"/>
+    <ellipse cx="60" cy="107" rx="5"  ry="3" fill="rgba(255,255,255,0.40)"/>
+  </svg>
+</div>
+
+<div id="status-bar">
+  <div id="status-dot" class="idle"></div>
+  <span id="status-text">准备就绪 — 点击麦克风开始</span>
+</div>
+
+<div id="controls">
+  <button id="mic-btn">🎤 开始说话</button>
+  <input id="text-input" type="text" placeholder="或输入文字...">
+</div>
+
+<div id="settings-row">
+  <label>LLM Key:</label>
+  <input id="api-key-input" type="password" placeholder="DeepSeek API Key">
+  <button id="save-key-btn">保存</button>
+  <label>模型:</label>
+  <select id="model-select">
+    <option value="chat">DeepSeek Chat</option>
+    <option value="v4flash">DeepSeek V4 Flash</option>
+  </select>
+</div>
+
+<div id="settings-row">
+  <label>ASR Key:</label>
+  <input id="asr-key-input" type="password" placeholder="Whisper API Key (SiliconFlow等)">
+  <button id="save-asr-btn">保存</button>
+  <label>端点:</label>
+  <input id="asr-endpoint-input" type="text" placeholder="默认: api.siliconflow.cn" style="flex:2">
+</div>
+
+<script type="module" src="sidepanel.js"></script>
+</body>
+</html>

@@ -1,0 +1,122 @@
+/* 智引灵 AI 导航导师 — 页面注入样式 */
+/* 所有选择器带 dhn- 前缀，防止污染宿主页面 */
+
+/* --- 高亮脉冲动画 --- */
+@keyframes dhn-pulse {
+  0% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0.5); }
+  70% { box-shadow: 0 0 0 12px rgba(59, 130, 246, 0); }
+  100% { box-shadow: 0 0 0 0 rgba(59, 130, 246, 0); }
+}
+
+@keyframes dhn-ripple {
+  0% { transform: scale(0.8); opacity: 1; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
+@keyframes dhn-arrow-bounce {
+  0%, 100% { transform: translateY(0); }
+  50% { transform: translateY(-6px); }
+}
+
+/* --- 高亮覆盖层 --- */
+.dhn-highlight-overlay {
+  position: fixed;
+  z-index: 2147483646;
+  pointer-events: none;
+  border-radius: 6px;
+  animation: dhn-pulse 2s ease-out infinite;
+  border: 3px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.08);
+  transition: all 0.3s ease;
+}
+
+/* --- 波纹圆圈 --- */
+.dhn-ripple-ring {
+  position: fixed;
+  z-index: 2147483645;
+  pointer-events: none;
+  border: 2px solid #3b82f6;
+  border-radius: 50%;
+  animation: dhn-ripple 1s ease-out forwards;
+}
+
+/* --- 指引箭头 --- */
+.dhn-guide-arrow {
+  position: fixed;
+  z-index: 2147483647;
+  pointer-events: none;
+  width: 24px;
+  height: 24px;
+  animation: dhn-arrow-bounce 1s ease-in-out infinite;
+}
+
+.dhn-guide-arrow::after {
+  content: '👇';
+  font-size: 20px;
+}
+
+/* --- 语音气泡提示 --- */
+.dhn-speech-bubble {
+  position: fixed;
+  z-index: 2147483647;
+  background: #1e293b;
+  color: #f8fafc;
+  padding: 10px 16px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  max-width: 240px;
+  line-height: 1.5;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  pointer-events: none;
+  animation: dhn-fade-in 0.3s ease-out;
+}
+
+@keyframes dhn-fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* --- 数字人头像小窗 (Mini Avatar) --- */
+.dhn-mini-avatar {
+  position: fixed;
+  z-index: 2147483647;
+  right: 20px;
+  bottom: 20px;
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #3b82f6, #8b5cf6);
+  box-shadow: 0 4px 16px rgba(59, 130, 246, 0.3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s;
+  pointer-events: all;
+}
+
+.dhn-mini-avatar:hover {
+  transform: scale(1.1);
+}
+
+.dhn-mini-avatar::after {
+  content: '🧑‍💻';
+  font-size: 28px;
+}
+
+/* --- 状态指示器 --- */
+.dhn-status-dot {
+  position: absolute;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  bottom: 4px;
+  right: 4px;
+  border: 2px solid white;
+}
+
+.dhn-status-dot.listening { background: #f59e0b; animation: dhn-pulse 1s infinite; }
+.dhn-status-dot.thinking { background: #8b5cf6; }
+.dhn-status-dot.speaking { background: #10b981; animation: dhn-pulse 1.5s infinite; }
+.dhn-status-dot.idle { background: #94a3b8; }
