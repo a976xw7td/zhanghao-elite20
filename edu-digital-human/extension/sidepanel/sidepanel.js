@@ -119,15 +119,27 @@ function setUIState(state, text) {
 
 
 // --- 消息监听 ---
-chrome.runtime.onMessage.addListener((msg) => {
-  if (msg.type === 'TTS_SPEAK') speakLocal(msg.payload.text);
-  else if (msg.type === 'ANIM_SET_STATE') {
-    // 回到 idle 时同步重置状态文字，防止错误提示永远停留
+chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
+  if (msg.type === 'TTS_SPEAK') { speakLocal(msg.payload.text); return; }
+  if (msg.type === 'TTS_PLAY') {
+    // 播放 Service Worker 传来的 TTS 音频（CosyVoice2）
+    const audio = new Audio(`data:${msg.payload.mimeType || 'audio/mp3'};base64,${msg.payload.audioBase64}`);
+    audio.volume = 0.9;
+    audio.play().then(() => {
+      audio.onended = () => { audio.remove(); sendResponse({ ok: true }); };
+      audio.onerror = () => { audio.remove(); sendResponse({ ok: false }); };
+    }).catch(() => {
+      audio.remove();
+      sendResponse({ ok: false });
+    });
+    return true; // async sendResponse
+  }
+  if (msg.type === 'ANIM_SET_STATE') {
     const text = msg.payload.state === 'idle' ? '准备就绪 — 按住麦克风说话' : null;
     setUIState(msg.payload.state, text);
+    return;
   }
-  else if (msg.type === 'STATUS_TEXT') {
-    // 录音失败时 SW 推送状态文本，并重置 isRecording
+  if (msg.type === 'STATUS_TEXT') {
     isRecording = false;
     micBtn.textContent = '🎤 按住说话';
     micBtn.classList.remove('recording');
