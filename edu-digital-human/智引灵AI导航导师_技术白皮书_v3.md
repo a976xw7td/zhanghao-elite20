@@ -43,7 +43,7 @@
 ├─────────────────────────────────────────────────────┤
 │ 对话层     │ Offscreen Document (getUserMedia 录音) │
 │            │ Content Script (备选录音路径)           │
-│            │ Chrome TTS (语音合成播报)               │
+│            │ CosyVoice2 TTS (SiliconFlow, claire女声) │
 ├─────────────────────────────────────────────────────┤
 │ 编排层     │ Service Worker (状态机 + 消息路由)      │
 │            │ TaskQueue (多步操作 + MutationObserver) │
@@ -85,7 +85,7 @@ Chrome Extension MV3 架构下，系统由四个独立进程组成，通过 Chro
 | `EXEC_TASK_QUEUE` | SW → Content | 执行多步任务队列 |
 | `EXEC_VERIFY_HIGHLIGHT` | SW → Content | 高亮后验证文字匹配 |
 | `ANIM_SET_STATE` | SW → SidePanel + Content | 同步动画状态 |
-| `TTS_SPEAK` | SW → SidePanel | TTS播报（备用路径，已改用chrome.tts） |
+| `TTS_PLAY` | SW → Content | TTS音频播放（CosyVoice2 base64 MP3） |
 | `STATUS_TEXT` | SW → SidePanel + Content | 推送状态文本 |
 | `PAGE_CHANGED` | Content → SW | SPA路由变化通知 |
 
@@ -202,10 +202,10 @@ LLM 响应被 `max_tokens` 截断时（`{"target":"...","action":"highlig...`）
 - 超时：10 秒
 
 **TTS 配置：**
-- 引擎：Chrome `chrome.tts` API（内置引擎，无需 API Key）
-- 语言：zh-CN
-- 语速：0.91，音高：1.1，音量：0.9
-- 优势：从 Service Worker 直接发声，不依赖侧边栏聚焦状态
+- 主引擎：SiliconFlow CosyVoice2（`FunAudioLLM/CosyVoice2-0.5B`，claire 温柔女声）
+- 降级引擎：Chrome `chrome.tts` API（内置引擎，API 异常时自动切换）
+- 音频格式：MP3，通过 Content Script 播放
+- 延迟：网络请求 ~500ms + 播放，与高亮并行执行，用户无感知
 
 **四种动画状态同步：**
 
@@ -296,7 +296,7 @@ EXEC_HIGHLIGHT(target=".nav-item-3", fallbackText="用量统计")
 | API 请求 + LLM 推理 | 500-1500ms | DeepSeek V4 Flash 优先，15s 超时 |
 | JSON 解析 | < 10ms | JSON.parse，截断时正则抢救 |
 | 高亮/点击执行 | < 50ms | 原生 DOM 操作，behavior:instant |
-| TTS 语音合成 | 200-500ms | chrome.tts 引擎，首段 200ms 可播放 |
+| TTS 语音合成 | 300-800ms | CosyVoice2 API，与高亮并行，用户无感知 |
 
 **合计：** 约 1.1 - 2.6 秒（最优路径），感知延迟可接受。
 
