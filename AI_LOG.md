@@ -14,7 +14,7 @@ This document transparently records every material AI-assisted decision made dur
 ### 2. Three-Model Cross-Model Adversarial Review
 - **Date:** 2026-05-06
 - **Decision:** Upgraded from single-model (DeepSeek-only) Lead+Critic to three-model review: DeepSeek v4-flash (Lead), Kimi kimi-k2.6 (Critic), Zhipu glm-4-flash (Scorer).
-- **Rationale:** The user explicitly wanted to "炫技" (show technical depth). Cross-model adversarial review — where three different providers' models check each other's work — is a concrete implementation of Harness Engineering that most hackathon projects won't attempt. It also provides genuine quality improvement: different models have different blind spots.
+- **Rationale:** Cross-model adversarial review — where three different providers' models check each other's work — is a concrete implementation of Harness Engineering that most hackathon projects won't attempt. It also provides genuine quality improvement: different models have different blind spots.
 - **AI Role:** Claude designed the 3-round architecture, implemented the AG2 Beta agent configuration for all three providers, and handled the graceful degradation chain.
 - **Trade-off:** More moving parts and API dependencies, but the fallback chain ensures the system degrades gracefully when providers are unavailable.
 
