@@ -7,6 +7,7 @@
 
 import { infer, inferMinimal, MODELS } from '../lib/llm-client.js';
 import { transcribe } from '../lib/asr-client.js';
+import { synthesize } from '../lib/tts-client.js';
 
 // --- 应用状态 (单一数据源) ---
 // 注意：demo 阶段保留默认密钥供快速演示；生产/开源前应通过设置面板覆盖并从源码移除
@@ -462,23 +463,38 @@ async function processIntent(transcript, domResult, tab) {
 }
 
 // --- TTS 播报 ---
-// 使用 chrome.tts（Chrome 内置引擎）直接从 SW 发声
-// 比 sidepanel speechSynthesis 可靠：不依赖侧边栏是否聚焦，且可 await 等待播完
+// 使用 SiliconFlow CosyVoice2 TTS（claire 温柔女声），比 Chrome 内置引擎更自然
+// Service Worker 无法直接播放音频 → 调 API 获取 base64 → 发给 content script 播放
 async function speakText(text) {
   if (!text) return;
-  return new Promise(resolve => {
-    chrome.tts.speak(text, {
-      lang: 'zh-CN',
-      rate: 0.91,
-      pitch: 1.1,
-      volume: 0.9,
-      onEvent: (event) => {
-        if (['end', 'error', 'cancelled', 'interrupted'].includes(event.type)) {
-          resolve();
+  try {
+    const audioBase64 = await synthesize(text, STATE.asrApiKey);
+    // 通过 content script 播放（content script 有 DOM 可创建 Audio 元素）
+    const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
+    const tab = tabs[0];
+    if (tab?.id) {
+      await chrome.tabs.sendMessage(tab.id, {
+        type: 'TTS_PLAY',
+        payload: { audioBase64, mimeType: 'audio/mp3' }
+      });
+    }
+  } catch (e) {
+    console.error('[智引灵] TTS failed, fallback to chrome.tts:', e.message);
+    // 降级到 Chrome 内置 TTS
+    return new Promise(resolve => {
+      chrome.tts.speak(text, {
+        lang: 'zh-CN',
+        rate: 0.91,
+        pitch: 1.1,
+        volume: 0.9,
+        onEvent: (event) => {
+          if (['end', 'error', 'cancelled', 'interrupted'].includes(event.type)) {
+            resolve();
+          }
         }
-      }
+      });
     });
-  });
+  }
 }
 
 function setAnim(state) {

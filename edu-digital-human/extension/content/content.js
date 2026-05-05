@@ -643,6 +643,20 @@
         sendResponse({ success: true });
         break;
 
+      case 'TTS_PLAY': {
+        // 播放 Service Worker 传来的 TTS 音频（SiliconFlow CosyVoice）
+        const audio = new Audio(`data:${payload.mimeType || 'audio/mp3'};base64,${payload.audioBase64}`);
+        audio.volume = 0.9;
+        audio.play().then(() => {
+          audio.onended = () => { audio.remove(); sendResponse({ ok: true }); };
+          audio.onerror = () => { audio.remove(); sendResponse({ ok: false, error: 'audio_play_error' }); };
+        }).catch(e => {
+          audio.remove();
+          sendResponse({ ok: false, error: e.message });
+        });
+        return true; // async response
+      }
+
       default:
         sendResponse({ error: 'UNKNOWN_MESSAGE_TYPE' });
     }
