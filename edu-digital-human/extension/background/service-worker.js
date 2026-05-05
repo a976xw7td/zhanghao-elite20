@@ -464,60 +464,37 @@ async function processIntent(transcript, domResult, tab) {
 
 // --- TTS 播报 ---
 // 使用 SiliconFlow CosyVoice2 TTS（claire 温柔女声），比 Chrome 内置引擎更自然
-// 播放策略：优先 content script（用户刚在页面上操作时有手势）→ 失败则侧边栏（文字输入时有手势）→ chrome.tts 兜底
+// Service Worker 无法直接播放音频 → 调 API 获取 base64 → 发给 content script 播放
 async function speakText(text) {
   if (!text) return;
-
-  // 获取音频数据（与高亮并行，用户无感知）
-  let audioBase64;
   try {
-    audioBase64 = await synthesize(text, STATE.asrApiKey);
-  } catch (e) {
-    console.error('[智引灵] TTS API failed, fallback to chrome.tts:', e.message);
-    return chromeTtsFallback(text);
-  }
-
-  // 尝试 1: 发给 content script 播放（语音输入时有用户手势）
-  try {
+    const audioBase64 = await synthesize(text, STATE.asrApiKey);
+    // 通过 content script 播放（content script 有 DOM 可创建 Audio 元素）
     const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
     const tab = tabs[0];
     if (tab?.id) {
-      const res = await chrome.tabs.sendMessage(tab.id, {
+      await chrome.tabs.sendMessage(tab.id, {
         type: 'TTS_PLAY',
         payload: { audioBase64, mimeType: 'audio/mp3' }
       });
-      if (res?.ok) return;
     }
-  } catch (_) { /* content script 不可达，继续尝试其他方式 */ }
-
-  // 尝试 2: 发给侧边栏播放（文字输入时有用户手势）
-  try {
-    const res = await chrome.runtime.sendMessage({
-      type: 'TTS_PLAY',
-      payload: { audioBase64, mimeType: 'audio/mp3' }
-    });
-    if (res?.ok) return;
-  } catch (_) { /* 侧边栏不可达 */ }
-
-  // 尝试 3: 兜底 chrome.tts
-  console.warn('[智引灵] Content/sidepanel playback failed, fallback to chrome.tts');
-  return chromeTtsFallback(text);
-}
-
-function chromeTtsFallback(text) {
-  return new Promise(resolve => {
-    chrome.tts.speak(text, {
-      lang: 'zh-CN',
-      rate: 0.91,
-      pitch: 1.1,
-      volume: 0.9,
-      onEvent: (event) => {
-        if (['end', 'error', 'cancelled', 'interrupted'].includes(event.type)) {
-          resolve();
+  } catch (e) {
+    console.error('[智引灵] TTS failed, fallback to chrome.tts:', e.message);
+    // 降级到 Chrome 内置 TTS
+    return new Promise(resolve => {
+      chrome.tts.speak(text, {
+        lang: 'zh-CN',
+        rate: 0.91,
+        pitch: 1.1,
+        volume: 0.9,
+        onEvent: (event) => {
+          if (['end', 'error', 'cancelled', 'interrupted'].includes(event.type)) {
+            resolve();
+          }
         }
-      }
+      });
     });
-  });
+  }
 }
 
 function setAnim(state) {
