@@ -546,6 +546,38 @@ button:disabled {
   text-transform: uppercase;
 }
 
+/* ───────── Live indicator for SSE streaming ───────── */
+.live-indicator {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: 2px var(--space-3);
+  border: 1px solid var(--brick);
+  border-radius: var(--radius-pill);
+  background: rgba(159, 58, 47, 0.08);
+  color: var(--brick);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  font-weight: 600;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  animation: live-pulse 1.2s ease-in-out infinite;
+}
+
+.live-indicator svg {
+  animation: live-dot 1.2s ease-in-out infinite;
+}
+
+@keyframes live-pulse {
+  0%, 100% { opacity: 0.85; }
+  50% { opacity: 1; }
+}
+
+@keyframes live-dot {
+  0%, 100% { opacity: 0.4; transform: scale(0.8); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
 /* ───────── Empty state (editorial) ───────── */
 .empty-state {
   display: grid;

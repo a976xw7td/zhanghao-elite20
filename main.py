@@ -20,7 +20,13 @@ def main() -> int:
     host = os.getenv("REFEREEOS_HOST", "127.0.0.1")
     port = int(os.getenv("REFEREEOS_PORT", "8000"))
     reload = os.getenv("REFEREEOS_RELOAD", "false").lower() == "true"
-    uvicorn.run("backend.app:app", host=host, port=port, reload=reload)
+    uvicorn.run(
+        "backend.app:app",
+        host=host,
+        port=port,
+        reload=reload,
+        reload_excludes=["outputs/*"] if reload else [],
+    )
     return 0
 
 

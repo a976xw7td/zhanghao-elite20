@@ -1,11 +1,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import queue
 import re
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from typing import Any
+
+logger = logging.getLogger("refereeos.orchestrator")
 
 from backend.metadata.related_work import get_related_work
 from backend.parsing.injection_scan import scan_for_prompt_injection
@@ -33,7 +37,8 @@ def detect_ag2_runtime() -> AG2Runtime:
         "integrity_agent",
         "novelty_literature_agent",
         "reproducibility_agent",
-        "area_chair_agent",
+        "area_chair_lead",
+        "area_chair_critic",
     ]
 
     try:
@@ -50,7 +55,7 @@ def detect_ag2_runtime() -> AG2Runtime:
             error=str(exc),
         )
 
-    model = os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview")
+    model = os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
     enable_llm = os.getenv("REFEREEOS_ENABLE_AG2_LLM", "false").lower() == "true"
     if not enable_llm:
         return AG2Runtime(
@@ -61,22 +66,43 @@ def detect_ag2_runtime() -> AG2Runtime:
             llm_model=model,
             status="disabled",
         )
-    if not _gemini_api_key():
+    if not _deepseek_api_key():
         return AG2Runtime(
             True,
             version,
-            f"AG2 {version} installed; Gemini synthesis unavailable (missing key)",
+            f"AG2 {version} installed; DeepSeek synthesis unavailable (missing key)",
             agents,
             llm_model=model,
             status="missing_key",
         )
 
-    return AG2Runtime(True, version, f"AG2 {version} + Gemini {model}", agents, True, model, "ready")
+    zhipu_model = os.getenv("ZHIPU_MODEL", "glm-4-flash")
+    kimi_model = os.getenv("KIMI_MODEL", "kimi-k2.6")
+    zhipu_available = bool(_zhipu_api_key())
+    kimi_available = bool(_kimi_api_key())
+    models = ["DeepSeek", model]
+    if kimi_available:
+        models.append(f"Kimi {kimi_model}")
+    if zhipu_available:
+        models.append(f"Zhipu {zhipu_model}")
+    label = f"AG2 Beta {version} + {' + '.join(models)}"
+
+    return AG2Runtime(True, version, label, agents, True, model, "ready")
 
 
-def analyze_fixture(fixture_id: str = "clean", field_domain: str | None = None) -> dict[str, Any]:
+def analyze_fixture(
+    fixture_id: str = "clean",
+    field_domain: str | None = None,
+    event_queue: queue.Queue | None = None,
+) -> dict[str, Any]:
     text, fixture_meta = load_fixture_text(fixture_id)
-    return analyze_text(text, source=f"sample_fixture:{fixture_meta['fixture_id']}", fixture_meta=fixture_meta, field_domain=field_domain)
+    return analyze_text(
+        text,
+        source=f"sample_fixture:{fixture_meta['fixture_id']}",
+        fixture_meta=fixture_meta,
+        field_domain=field_domain,
+        event_queue=event_queue,
+    )
 
 
 def analyze_text(
@@ -84,6 +110,7 @@ def analyze_text(
     source: str,
     fixture_meta: dict[str, Any] | None = None,
     field_domain: str | None = None,
+    event_queue: queue.Queue | None = None,
 ) -> dict[str, Any]:
     runtime = detect_ag2_runtime()
     fixture_meta = fixture_meta or {"fixture_id": "uploaded", **FIXTURES["clean"]}
@@ -91,38 +118,67 @@ def analyze_text(
     if field_domain:
         paper["field_guess"] = field_domain
 
+    kimi_model = os.getenv("KIMI_MODEL", "kimi-k2.6")
+    kimi_available = bool(_kimi_api_key())
+    zhipu_model = os.getenv("ZHIPU_MODEL", "glm-4-flash")
+    zhipu_available = bool(_zhipu_api_key())
+    models_parts = ["DeepSeek"]
+    if kimi_available:
+        models_parts.append(f"Kimi {kimi_model}")
+    if zhipu_available:
+        models_parts.append(f"Zhipu {zhipu_model}")
+    provider_label = " + ".join(models_parts)
+
     board = build_empty_board(
         paper,
         {
             "workflow_engine": runtime.label,
             "sandbox_provider": "Daytona",
-            "llm_provider": "OpenAI",
-            "llm_model": DEFAULT_OPENAI_MODEL,
+            "llm_provider": provider_label if runtime.llm_enabled else "none",
+            "llm_model": runtime.llm_model if runtime.llm_enabled else DEFAULT_OPENAI_MODEL,
             "fixture_id": fixture_meta.get("fixture_id"),
             "ag2_status": runtime.status,
             "ag2_model": runtime.llm_model,
+            "kimi_model": kimi_model if kimi_available else None,
+            "zhipu_model": zhipu_model if zhipu_available else None,
         },
     )
 
-    _run_step(board, "intake_agent", "Extract paper profile and atomic claims", lambda: _intake(board, paper))
-    _run_step(board, "methods_statistics_agent", "Assess methodology and statistics risk", lambda: _methods_stats(board, paper))
-    _run_step(board, "integrity_agent", "Scan manuscript for prompt-injection and suspicious instructions", lambda: _integrity(board, paper))
-    _run_step(board, "novelty_literature_agent", "Attach lightweight related-work risks", lambda: _novelty(board, paper))
+    _run_step(board, "intake_agent", "Extract paper profile and atomic claims", lambda: _intake(board, paper), event_queue=event_queue)
+    _run_step(board, "methods_statistics_agent", "Assess methodology and statistics risk", lambda: _methods_stats(board, paper), event_queue=event_queue)
+    _run_step(board, "integrity_agent", "Scan manuscript for prompt-injection and suspicious instructions", lambda: _integrity(board, paper), event_queue=event_queue)
+    _run_step(board, "novelty_literature_agent", "Attach lightweight related-work risks", lambda: _novelty(board, paper), event_queue=event_queue)
     _run_step(
         board,
         "reproducibility_agent",
-        "Run Daytona sandbox with OpenAI GPT-5.5 as reproducibility agent",
+        "Run Daytona sandbox reproducibility probe",
         lambda: _reproducibility(board, paper, fixture_meta),
+        event_queue=event_queue,
     )
-    _run_step(board, "area_chair_agent", _area_chair_label(runtime), lambda: _area_chair(board, runtime))
+    _run_step(board, "area_chair_agent", _area_chair_label(runtime), lambda: _area_chair(board, runtime), event_queue=event_queue)
 
     return board
 
 
-def _run_step(board: dict[str, Any], agent: str, label: str, fn) -> None:
+def _run_step(
+    board: dict[str, Any],
+    agent: str,
+    label: str,
+    fn,
+    event_queue: queue.Queue | None = None,
+) -> None:
     started = datetime.now(timezone.utc).isoformat()
     trace = {"agent": agent, "label": label, "status": "running", "started_at": started}
     board["agent_trace"].append(trace)
+
+    if event_queue is not None:
+        event_queue.put_nowait(_make_sse_event("step", trace))
+        # Small delay so the SSE stream delivers the "running" state
+        # before fn() completes. Otherwise fast steps batch running+complete
+        # together and React 18 never renders the intermediate state.
+        import time as _time
+        _time.sleep(0.12)
+
     try:
         fn()
         trace["status"] = "complete"
@@ -141,6 +197,14 @@ def _run_step(board: dict[str, Any], agent: str, label: str, fn) -> None:
         )
     finally:
         trace["completed_at"] = datetime.now(timezone.utc).isoformat()
+
+    if event_queue is not None:
+        event_queue.put_nowait(_make_sse_event("step", trace))
+
+
+def _make_sse_event(event_type: str, data: dict[str, Any]) -> str:
+    """Format a dict as an SSE event data line."""
+    return json.dumps({"type": event_type, **data}, default=str)
 
 
 def _intake(board: dict[str, Any], paper: dict[str, Any]) -> None:
@@ -271,18 +335,18 @@ def _area_chair(board: dict[str, Any], runtime: AG2Runtime) -> None:
 
     if runtime.llm_enabled:
         try:
-            synthesis = _ag2_area_chair_synthesis(board, recommendation, expertise, runtime)
+            synthesis = _ag2_beta_area_chair_synthesis(board, recommendation, expertise, runtime)
             board["metadata"]["ag2_status"] = "used"
         except Exception as exc:
             board["metadata"]["ag2_status"] = "error"
             board["metadata"]["ag2_error"] = str(exc)[:500]
             _append_concern(
                 board,
-                "area_chair_agent",
+                "area_chair_lead",
                 "high",
                 "workflow",
-                f"AG2/Gemini area-chair synthesis failed: {exc}",
-                "Check AG2/Gemini configuration before the live demo or use deterministic fallback.",
+                f"AG2 Beta area-chair synthesis failed: {exc}",
+                "Check DeepSeek configuration before the live demo or use deterministic fallback.",
                 claim_ids=[],
             )
             recommendation = _triage_recommendation(board)
@@ -436,55 +500,49 @@ def _area_chair_label(runtime: AG2Runtime) -> str:
     return "Synthesize reviewer-prep packet with deterministic fallback"
 
 
-def _ag2_area_chair_synthesis(
-    board: dict[str, Any],
-    recommendation: str,
-    expertise: list[str],
-    runtime: AG2Runtime,
-) -> dict[str, str]:
-    import autogen  # type: ignore
+def _deepseek_config():
+    from autogen.beta.config import OpenAIConfig
 
-    api_key = _gemini_api_key()
-    if not api_key:
-        raise RuntimeError("Gemini API key is not configured")
-
-    model = runtime.llm_model or os.getenv("GEMINI_MODEL", "gemini-3.1-pro-preview")
-    llm_config = {
-        "config_list": [
-            {
-                "model": model,
-                "api_type": "google",
-                "api_key": api_key,
-            }
-        ],
-        "temperature": 0,
-    }
-    agent = autogen.ConversableAgent(
-        name="area_chair_agent",
-        system_message=(
-            "You are the RefereeOS area chair synthesis agent. Summarize review-prep evidence for a human editor. "
-            "Do not recommend accepting or rejecting publication."
-        ),
-        llm_config=llm_config,
-        human_input_mode="NEVER",
-        code_execution_config=False,
+    return OpenAIConfig(
+        model=os.getenv("DEEPSEEK_MODEL", "deepseek-chat"),
+        api_key=_deepseek_api_key(),
+        base_url=os.getenv("DEEPSEEK_BASE_URL", "https://api.deepseek.com/v1"),
+        temperature=0,
     )
-    reply = agent.generate_reply(messages=[{"role": "user", "content": _area_chair_prompt(board, recommendation, expertise)}])
-    text = _reply_to_text(reply)
-    parsed = _parse_json_object(text)
-    if parsed:
-        return {
-            "source": f"AG2 + Gemini {model}",
-            "summary": str(parsed.get("summary", "")).strip(),
-            "risk_summary": str(parsed.get("risk_summary", "")).strip(),
-            "human_focus": str(parsed.get("human_focus", "")).strip(),
-        }
-    return {
-        "source": f"AG2 + Gemini {model}",
-        "summary": text[:1200],
-        "risk_summary": "",
-        "human_focus": "",
-    }
+
+
+def _deepseek_api_key() -> str:
+    return os.getenv("DEEPSEEK_API_KEY") or ""
+
+
+def _kimi_config():
+    from autogen.beta.config import OpenAIConfig
+
+    return OpenAIConfig(
+        model=os.getenv("KIMI_MODEL", "kimi-k2.6"),
+        api_key=_kimi_api_key(),
+        base_url=os.getenv("KIMI_BASE_URL", "https://api.moonshot.cn/v1"),
+        temperature=0.3,
+    )
+
+
+def _kimi_api_key() -> str:
+    return os.getenv("KIMI_API_KEY") or ""
+
+
+def _zhipu_config():
+    from autogen.beta.config import OpenAIConfig
+
+    return OpenAIConfig(
+        model=os.getenv("ZHIPU_MODEL", "glm-4-flash"),
+        api_key=_zhipu_api_key(),
+        base_url=os.getenv("ZHIPU_BASE_URL", "https://open.bigmodel.cn/api/paas/v4"),
+        temperature=0.3,
+    )
+
+
+def _zhipu_api_key() -> str:
+    return os.getenv("ZHIPU_API_KEY") or ""
 
 
 def _area_chair_prompt(board: dict[str, Any], recommendation: str, expertise: list[str]) -> str:
@@ -527,8 +585,155 @@ def _parse_json_object(text: str) -> dict[str, Any] | None:
     return value if isinstance(value, dict) else None
 
 
-def _gemini_api_key() -> str:
-    return os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY") or ""
+def _ag2_beta_area_chair_synthesis(
+    board: dict[str, Any],
+    recommendation: str,
+    expertise: list[str],
+    runtime: AG2Runtime,
+) -> dict[str, str]:
+    """AG2 Beta multi-agent: 3-round cross-model review.
+
+    DeepSeek (Lead) — drafts and revises all 3 rounds.
+    Kimi (Critic) — cross-model adversarial review in rounds 1–2.
+    Zhipu (Scorer) — final 0–10 verdict in round 3 (least calls).
+
+    Falls back: missing Kimi → DeepSeek self-critiques; missing Zhipu → DeepSeek self-scores.
+    """
+    import asyncio
+
+    from autogen.beta import Agent
+
+    deepseek_model = runtime.llm_model or os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    kimi_model = os.getenv("KIMI_MODEL", "kimi-k2.6")
+    zhipu_model = os.getenv("ZHIPU_MODEL", "glm-4-flash")
+    kimi_available = bool(_kimi_api_key())
+    zhipu_available = bool(_zhipu_api_key())
+
+    parts = ["DeepSeek (Lead)"]
+    if kimi_available:
+        parts.append(f"Kimi (Critic)")
+    if zhipu_available:
+        parts.append(f"Zhipu (Scorer)")
+    source_label = f"AG2 Beta + {' + '.join(parts)} — 3-round review"
+
+    digest = _area_chair_prompt(board, recommendation, expertise)
+
+    async def _run() -> dict[str, str]:
+        lead = Agent(
+            "area_chair_lead",
+            prompt=(
+                "You are the RefereeOS area chair synthesis lead. "
+                "Given review-prep evidence, draft a concise synthesis with summary, risk_summary, and human_focus. "
+                "Return JSON only. Do not recommend accepting or rejecting publication."
+            ),
+            config=_deepseek_config(),
+        )
+
+        # Kimi as cross-model critic for rounds 1–2
+        critic_config = _kimi_config() if kimi_available else _deepseek_config()
+        critic_model = f"Kimi {kimi_model}" if kimi_available else f"DeepSeek {deepseek_model}"
+        critic = Agent(
+            "area_chair_critic",
+            prompt=(
+                f"You are the RefereeOS area chair critic, powered by {critic_model}. "
+                "Review the lead's synthesis draft from a different perspective. "
+                "Flag any missing risks, unsupported claims, blind spots, or bias. Be specific and terse. "
+                "Return your critique as plain text, then end with a JSON block {\"gaps\": [...], \"endorsed\": true/false}."
+            ),
+            config=critic_config,
+        )
+
+        # ── Round 1: Lead drafts + Critic reviews ──
+        lead_draft = await lead.ask(digest)
+        draft_text = str(lead_draft.body)
+
+        critic_r1 = await critic.ask(
+            f"ROUND 1/3\nLead synthesis draft:\n{draft_text}\n\nCritique this. Flag gaps, biases, or missing risks."
+        )
+        critique_r1 = str(critic_r1.body)
+
+        # ── Round 2: Lead revises + Critic re-reviews ──
+        lead_r2 = await lead.ask(
+            f"ROUND 2/3\nYour previous draft:\n{draft_text}\n\nCritic feedback:\n{critique_r1}\n\n"
+            "Revise your synthesis incorporating the critic's feedback. Return JSON only."
+        )
+        draft_r2 = str(lead_r2.body)
+
+        critic_r2 = await critic.ask(
+            f"ROUND 2/3\nRevised synthesis:\n{draft_r2}\n\n"
+            "The lead has revised based on your first critique. Identify any remaining gaps or improvements."
+        )
+        critique_r2 = str(critic_r2.body)
+
+        # ── Round 3: Lead finalizes ──
+        lead_final = await lead.ask(
+            f"ROUND 3/3 (FINAL)\nYour previous draft:\n{draft_r2}\n\n"
+            f"Critic's second review:\n{critique_r2}\n\n"
+            "Produce your final synthesis incorporating all feedback. Return JSON only with keys summary, risk_summary, and human_focus."
+        )
+        final_text = str(lead_final.body)
+
+        # ── Round 3: Zhipu (or DeepSeek fallback) final scoring ──
+        scorer_config = _zhipu_config() if zhipu_available else _deepseek_config()
+        scorer_name = f"Zhipu {zhipu_model}" if zhipu_available else f"DeepSeek {deepseek_model}"
+        scorer = Agent(
+            "area_chair_scorer",
+            prompt=(
+                f"You are the RefereeOS final synthesis scorer, powered by {scorer_name}. "
+                "Rate the final synthesis 0-10 on completeness, accuracy, and actionability. "
+                "Return JSON: {\"score\": <0-10>, \"verdict\": \"PASS|MINOR|REVISE\", \"comment\": \"...\"}"
+            ),
+            config=scorer_config,
+        )
+        scorer_result = await scorer.ask(
+            f"FINAL SCORING\nFinal synthesis:\n{final_text}\n\n"
+            "Rate the final synthesis 0-10 on completeness, accuracy, and actionability. "
+            "Return JSON: {{\"score\": <0-10>, \"verdict\": \"PASS|MINOR|REVISE\", \"comment\": \"...\"}}"
+        )
+        scoring_text = str(scorer_result.body)
+        score_data = _parse_json_object(scoring_text) or {}
+
+        parsed = _parse_json_object(final_text) or _parse_json_object(draft_text)
+        if parsed:
+            return {
+                "source": source_label,
+                "summary": str(parsed.get("summary", "")).strip(),
+                "risk_summary": str(parsed.get("risk_summary", "")).strip(),
+                "human_focus": str(parsed.get("human_focus", "")).strip(),
+                "critic_score": score_data.get("score"),
+                "critic_verdict": str(score_data.get("verdict", "")),
+            }
+        return {
+            "source": source_label,
+            "summary": final_text[:1200],
+            "risk_summary": critique_r1[:600],
+            "human_focus": "",
+            "critic_score": score_data.get("score"),
+            "critic_verdict": str(score_data.get("verdict", "")),
+        }
+
+    import threading
+
+    AG2_SYNTHESIS_TIMEOUT = 300  # seconds — 3 rounds need more time
+
+    result: dict[str, str] = {}
+    error: Exception | None = None
+
+    def _target() -> None:
+        nonlocal result, error
+        try:
+            result = asyncio.run(_run())
+        except Exception as exc:
+            error = exc
+
+    thread = threading.Thread(target=_target, daemon=True)
+    thread.start()
+    thread.join(timeout=AG2_SYNTHESIS_TIMEOUT)
+    if thread.is_alive():
+        raise TimeoutError(f"AG2 Beta synthesis timed out after {AG2_SYNTHESIS_TIMEOUT}s")
+    if error:
+        raise error
+    return result
 
 
 def _claim_ids_for_concern(board: dict[str, Any], category: str, concern_text: str) -> list[str]:
@@ -542,12 +747,12 @@ def _claim_ids_for_concern(board: dict[str, Any], category: str, concern_text: s
         if "baseline" in lowered or "train/test" in lowered:
             return _metric_claim_ids(board)
         if "ablation" in lowered:
-            return _claim_ids_matching(board, ["feature", "method", "component"])
+            return list(set(_metric_claim_ids(board) + _claim_ids_matching(board, ["feature", "method", "component", "f1", "improves"])))
     return []
 
 
 def _metric_claim_ids(board: dict[str, Any]) -> list[str]:
-    return _claim_ids_matching(board, ["macro f1", "f1", "metric", "benchmark", "reported"])
+    return _claim_ids_matching(board, ["macro f1", "f1", "metric", "benchmark", "reported", "outperform", "baseline", "obsolete"])
 
 
 def _claim_ids_matching(board: dict[str, Any], keywords: list[str]) -> list[str]:

@@ -1,8 +1,8 @@
 from __future__ import annotations
 
 import base64
-import csv
 import json
+import logging
 import os
 import re
 import subprocess
@@ -10,6 +10,8 @@ import sys
 import textwrap
 from pathlib import Path
 from typing import Any
+
+logger = logging.getLogger("refereeos.repro")
 
 
 try:
@@ -22,7 +24,18 @@ except Exception:
     pass
 
 
-DEFAULT_OPENAI_MODEL = os.getenv("OPENAI_MODEL", "gpt-5.5")
+def _resolve_default_model() -> str:
+    if os.getenv("REFEREEOS_ENABLE_AG2_LLM", "false").lower() == "true":
+        return os.getenv("DEEPSEEK_MODEL", "deepseek-chat")
+    return os.getenv("OPENAI_MODEL", "gpt-4o")
+
+
+DEFAULT_OPENAI_MODEL = _resolve_default_model()
+_repro_probe_label = "Reproducibility agent: select and run metric recalculation probe"
+
+_DANGEROUS_SCRIPT_PATTERN = re.compile(
+    r"\b(?:import|from)\s+(?:os|subprocess|shutil|socket|ctypes|eval|exec|__import__|compile|pty|posix|commands|pickle|base64)\b"
+)
 
 
 class DaytonaOpenAIReproRunner:
@@ -39,7 +52,7 @@ class DaytonaOpenAIReproRunner:
             return self._run_in_daytona(payload)
         except Exception as exc:
             if payload.get("custom_artifact") or not self.allow_local_fallback:
-                return self._inconclusive_receipt(payload, f"Daytona run failed and fallback is disabled: {exc}")
+                return self._inconclusive_receipt(payload, f"Daytona run failed and fallback is disabled: {exc}", provider="Daytona (unavailable)")
             return self._run_local_fallback(payload, str(exc))
 
     def _build_payload(self, fixture_meta: dict[str, Any], paper: dict[str, Any]) -> dict[str, Any]:
@@ -96,12 +109,18 @@ class DaytonaOpenAIReproRunner:
                 pass
 
     def _run_local_fallback(self, payload: dict[str, Any], reason: str) -> dict[str, Any]:
+        logger.warning("Using local fallback for reproducibility: %s", reason)
+
+        script_text = payload["metric_script"]
+        if _DANGEROUS_SCRIPT_PATTERN.search(script_text):
+            return self._inconclusive_receipt(payload, "Script contains dangerous imports; blocked by security policy.")
+
         temp_dir = Path("outputs") / "local_repro"
         temp_dir.mkdir(parents=True, exist_ok=True)
         results_path = temp_dir / f"{payload['fixture_id']}_results.csv"
         script_path = temp_dir / "reproduce_metric.py"
         results_path.write_text(payload["results_csv"], encoding="utf-8")
-        script_path.write_text(payload["metric_script"], encoding="utf-8")
+        script_path.write_text(script_text, encoding="utf-8")
 
         completed = subprocess.run(
             [sys.executable, str(script_path), str(results_path)],
@@ -119,7 +138,7 @@ class DaytonaOpenAIReproRunner:
         )
 
         return {
-            "probe": "OpenAI GPT-5.5 reproducibility agent: select and run metric recalculation probe",
+            "probe": _repro_probe_label,
             "sandbox_provider": "local fallback (Daytona unavailable)",
             "model": payload["llm_model"],
             "status": status,
@@ -136,10 +155,10 @@ class DaytonaOpenAIReproRunner:
             "exit_code": completed.returncode,
         }
 
-    def _inconclusive_receipt(self, payload: dict[str, Any], reason: str) -> dict[str, Any]:
+    def _inconclusive_receipt(self, payload: dict[str, Any], reason: str, *, provider: str = "Daytona") -> dict[str, Any]:
         return {
-            "probe": "OpenAI GPT-5.5 reproducibility agent: select and run metric recalculation probe",
-            "sandbox_provider": "Daytona",
+            "probe": _repro_probe_label,
+            "sandbox_provider": provider,
             "model": payload["llm_model"],
             "status": "inconclusive",
             "commands_run": [],
@@ -203,7 +222,7 @@ def _sandbox_code(payload: dict[str, Any]) -> str:
 
         def ask_openai() -> dict:
             api_key = os.getenv("OPENAI_API_KEY") or payload.get("openai_api_key")
-            model = os.getenv("OPENAI_MODEL", payload.get("llm_model", "gpt-5.5"))
+            model = os.getenv("OPENAI_MODEL", payload.get("llm_model", "gpt-4o"))
             if not api_key:
                 return {{
                     "interpretation": "OpenAI credentials were not visible in the sandbox, so the sandbox used deterministic interpretation after running the artifact.",
@@ -307,9 +326,9 @@ def _sandbox_code(payload: dict[str, Any]) -> str:
             default_followup = "Ask authors for a runnable artifact or clearer metric definition."
 
         receipt = {{
-            "probe": "OpenAI GPT-5.5 reproducibility agent: select and run metric recalculation probe",
+            "probe": "{_repro_probe_label}",
             "sandbox_provider": "Daytona",
-            "model": payload.get("llm_model", "gpt-5.5"),
+            "model": payload.get("llm_model", "{DEFAULT_OPENAI_MODEL}"),
             "status": status,
             "commands_run": [f"{{sys.executable}} reproduce_metric.py results.csv"],
             "reported_result": f"{{reported:.2f}}",

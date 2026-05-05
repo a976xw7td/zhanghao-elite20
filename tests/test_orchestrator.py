@@ -8,9 +8,9 @@ from backend.agents import orchestrator
 
 
 PASSED_RECEIPT = {
-    "probe": "OpenAI GPT-5.5 reproducibility agent: select and run metric recalculation probe",
+    "probe": "Reproducibility agent: select and run metric recalculation probe",
     "sandbox_provider": "Daytona",
-    "model": "gpt-5.5",
+    "model": "deepseek-v4-flash",
     "status": "passed",
     "commands_run": ["python reproduce_metric.py results.csv"],
     "reported_result": "0.87",
@@ -57,7 +57,9 @@ class OrchestratorTests(unittest.TestCase):
 
         linked_claim_ids = [claim["id"] for claim in board["claims"] if repro_concern["id"] in claim["concern_ids"]]
 
-        self.assertEqual(linked_claim_ids, ["claim_002"])
+        self.assertIn("claim_002", linked_claim_ids)
+        # claim_004 also matches metric keywords after keyword expansion
+        self.assertIn("claim_004", linked_claim_ids)
 
     def test_workflow_high_concern_prevents_ready_recommendation(self) -> None:
         board = {
@@ -88,12 +90,12 @@ The paper reports macro F1 of 0.87.
 
         self.assertTrue(any("Causal language is unsupported" in c["text"] for c in board["concerns"]))
 
-    def test_ag2_fallback_still_produces_packet_without_gemini_key(self) -> None:
+    def test_ag2_fallback_still_produces_packet_without_keys(self) -> None:
         env = {
             "REFEREEOS_ENABLE_AG2_LLM": "true",
-            "GEMINI_API_KEY": "",
-            "GOOGLE_GEMINI_API_KEY": "",
-            "GOOGLE_API_KEY": "",
+            "DEEPSEEK_API_KEY": "",
+            "KIMI_API_KEY": "",
+            "ZHIPU_API_KEY": "",
         }
         with patch.dict(os.environ, env, clear=False):
             with patch.object(orchestrator.DaytonaOpenAIReproRunner, "run", return_value=dict(PASSED_RECEIPT)):
