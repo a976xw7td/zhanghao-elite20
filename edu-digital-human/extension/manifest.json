@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "智引灵 AI 导航导师",
+  "name": "智引 AI 导航导师",
   "version": "1.0.0",
-  "description": "智引灵AI导航导师——帮助高校师生在在线教学平台上快速找到方向",
+  "description": "智引AI导航导师——帮助高校师生在在线教学平台上通过语音快速定位功能、理解课程内容、完成学习任务",
   "permissions": [
     "sidePanel",
     "storage",
     "activeTab",
     "scripting",
-    "tts"
+    "tts",
+    "offscreen"
   ],
   "host_permissions": [
     "<all_urls>"
@@ -29,7 +30,7 @@
     }
   ],
   "action": {
-    "default_title": "智引灵 AI 导航导师",
+    "default_title": "智引 AI 导航导师",
     "default_icon": {
       "16": "assets/icon-16.png",
       "48": "assets/icon-48.png",

@@ -21,9 +21,9 @@ const DomDistiller = (() => {
     'option', 'tab', 'switch', 'checkbox', 'radio', 'combobox', 'textbox'
   ]);
 
-  const MAX_ELEMENTS_PER_REGION = 12;
-  const MAX_PRIORITY_PER_REGION = 24;
-  const MAX_OFFTRACK_PER_REGION  = 4;
+  const MAX_ELEMENTS_PER_REGION = 16;
+  const MAX_PRIORITY_PER_REGION = 28;
+  const MAX_OFFTRACK_PER_REGION  = 8;
   const MAX_PROMPT_ELEMENTS      = 35;
   const MAX_PROMPT_ELEMENTS_FOCUSED = 60;
   const MAX_RAW_ELEMENTS = 500;
@@ -89,6 +89,16 @@ const DomDistiller = (() => {
       pattern: /关闭|退出|取消|返回|close|exit|cancel|back|go[\s-]?back/,
       regions: ['header-bar', 'main-content', 'main']
     },
+    // --- 教育场景（窄匹配，避免与通用意图冲突） ---
+    // 仅覆盖教育特有的、通用 pattern 无法命中的意图
+    {
+      pattern: /(查|看|在哪|怎么).*(成绩|分数|绩点|学分)|GPA|grade|score|credit/,
+      regions: ['navigation', 'sidebar', 'main-content']
+    },
+    {
+      pattern: /(选课|退课|课表|培养方案|学籍)|(enrollment|schedule|curriculum)/,
+      regions: ['navigation', 'main-content', 'sidebar']
+    },
   ];
 
   /**
@@ -111,6 +121,9 @@ const DomDistiller = (() => {
       'button, a[href], input:not([type="hidden"]), select, textarea, ' +
       '[role="button"], [role="link"], [role="menuitem"], [role="tab"], ' +
       '[role="switch"], [role="checkbox"], [role="combobox"], ' +
+      '[role="navigation"] a, [role="navigation"] button, ' +
+      '[role="tablist"] [role="tab"], [role="menubar"] [role="menuitem"], ' +
+      'header a, header button, nav a, nav button, ' +
       '[onclick], [tabindex]:not([tabindex="-1"])';
     const result = [];
     const candidates = doc.querySelectorAll(selector);
@@ -143,6 +156,8 @@ const DomDistiller = (() => {
     const tabIdx = el.getAttribute('tabindex');
     if (tabIdx !== null && tabIdx !== '-1') return true;
     if (el.closest('a') || el.closest('button')) return true;
+    // header/nav 内的元素往往是导航项（教学平台顶部标签等）
+    if (el.closest('header, nav, [role="navigation"], [role="banner"]')) return true;
     return false;
   }
 
@@ -204,10 +219,10 @@ const DomDistiller = (() => {
       }
 
       const limit = prioritySet.has(region.name)
-        ? MAX_PRIORITY_PER_REGION    // 重点区域：放宽到 24
+        ? MAX_PRIORITY_PER_REGION    // 重点区域：放宽到 28
         : hasPriority
-          ? MAX_OFFTRACK_PER_REGION  // 有意图但非重点：严格限制到 4
-          : MAX_ELEMENTS_PER_REGION; // 无意图：均匀 12
+          ? MAX_OFFTRACK_PER_REGION  // 有意图但非重点：提高到 8
+          : MAX_ELEMENTS_PER_REGION; // 无意图：均匀 16
 
       if (regions[region.name].elements.length < limit) {
         regions[region.name].elements.push(el);
@@ -290,12 +305,15 @@ const DomDistiller = (() => {
   function assemblePrompt(distilled, userIntent, promptLimit) {
     const regionLines = distilled.regions.map(r => r.summary).join('\n');
 
+    // 动态调整元素数量：大页面（如GitHub）元素文本长，超阈值时减半
+    const effectiveLimit = regionLines.length > 1200 ? Math.min(promptLimit, 30) : promptLimit;
+
     const elements = distilled.elements
-      .slice(0, promptLimit)
+      .slice(0, effectiveLimit)
       .map(e => `  ${e.tag}[${(e.text || '').slice(0, 25)}] → ${e.strongSelector}`)
       .join('\n');
-    const truncated = distilled.elements.length > promptLimit
-      ? `\n  …省略${distilled.elements.length - promptLimit}个元素` : '';
+    const truncated = distilled.elements.length > effectiveLimit
+      ? `\n  …省略${distilled.elements.length - effectiveLimit}个元素` : '';
 
     const priorityHint = distilled.focusedRegions?.length
       ? `\n重点关注区域：${distilled.focusedRegions.join('、')}\n` : '';

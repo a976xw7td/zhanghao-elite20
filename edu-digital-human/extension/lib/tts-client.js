@@ -12,6 +12,13 @@ const TTS_ENDPOINT = 'https://api.siliconflow.cn/v1/audio/speech';
 const TTS_MODEL = 'FunAudioLLM/CosyVoice2-0.5B';
 const TTS_VOICE = 'FunAudioLLM/CosyVoice2-0.5B:claire';
 
+// 根据文本语种选择音色：含中文用 claire，纯英文用 cosy-2-instruct
+function pickVoice(text) {
+  return /[一-鿿]/.test(text)
+    ? TTS_VOICE
+    : 'FunAudioLLM/CosyVoice2-0.5B:cosy-2-instruct';
+}
+
 /**
  * 将文本转为语音，返回 base64 编码的 MP3
  * @param {string} text - 要合成的文本
@@ -25,7 +32,7 @@ export async function synthesize(text, apiKey) {
   const payload = {
     model: TTS_MODEL,
     input: text,
-    voice: TTS_VOICE,
+    voice: pickVoice(text),
     response_format: 'mp3'
   };
 

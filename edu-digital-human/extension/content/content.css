@@ -1,4 +1,4 @@
-/* 智引灵 AI 导航导师 — 页面注入样式 */
+/* 智引 AI 导航导师 — 页面注入样式 */
 /* 所有选择器带 dhn- 前缀，防止污染宿主页面 */
 
 /* --- 高亮脉冲动画 --- */
@@ -55,21 +55,56 @@
   font-size: 20px;
 }
 
-/* --- 语音气泡提示 --- */
-.dhn-speech-bubble {
+/* --- Widget 气泡 — 从皮卡丘右侧弹出，竖排文字 --- */
+.dhn-widget-bubble {
   position: fixed;
   z-index: 2147483647;
-  background: #1e293b;
+  max-height: 220px;
+  padding: 14px 12px;
+  border-radius: 24px;
+  background: rgba(15, 23, 42, 0.92);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
   color: #f8fafc;
-  padding: 10px 16px;
-  border-radius: 12px;
-  font-size: 14px;
+  font-size: 13px;
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
-  max-width: 240px;
-  line-height: 1.5;
-  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.2);
+  line-height: 1.6;
+  writing-mode: vertical-rl;
+  text-orientation: upright;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.3);
   pointer-events: none;
-  animation: dhn-fade-in 0.3s ease-out;
+  opacity: 0;
+  transform: translateY(-50%) scale(0.8);
+  transition: opacity 0.25s ease-out, transform 0.25s ease-out;
+}
+.dhn-widget-bubble.visible {
+  opacity: 1;
+  transform: translateY(-50%) scale(1);
+}
+
+@media (prefers-color-scheme: light) {
+  .dhn-widget-bubble {
+    background: rgba(255, 255, 255, 0.95);
+    color: #1e293b;
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
+  }
+}
+
+/* --- TaskQueue 步骤气泡 — 定位到目标元素上方 --- */
+.dhn-speech-bubble {
+  position: fixed;
+  z-index: 2147483646;
+  background: rgba(15, 23, 42, 0.88);
+  color: #f8fafc;
+  padding: 8px 14px;
+  border-radius: 16px;
+  font-size: 13px;
+  font-family: -apple-system, BlinkMacSystemFont, sans-serif;
+  max-width: 200px;
+  line-height: 1.4;
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.25);
+  pointer-events: none;
+  animation: dhn-fade-in 0.25s ease-out;
 }
 
 @keyframes dhn-fade-in {

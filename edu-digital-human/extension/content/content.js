@@ -12,6 +12,7 @@
   let highlightEl = null;
   let highlightTargetEl = null;   // 当前被高亮的目标元素（用于 verifyText 验证）
   let highlightClickDismiss = null;
+  let _highlightTrackRaf = null;
   let speechBubble = null;
 
   // --- Widget 内部引用 ---
@@ -36,7 +37,7 @@
 :host {
   position: fixed !important;
   bottom: 24px !important;
-  right: 24px !important;
+  right: 32px !important;
   z-index: 2147483647 !important;
   display: block;
   font-family: -apple-system, BlinkMacSystemFont, sans-serif;
@@ -47,7 +48,7 @@
   height: 110px;
 }
 
-/* ── 智引灵 SVG ── */
+/* ── 智引 SVG ── */
 .xb-svg {
   display: block;
   overflow: visible;
@@ -261,7 +262,7 @@
     <button class="fbtn cfg" id="fbtn-cfg" title="打开设置面板">⚙️</button>
   </div>
 
-  <!-- 智引灵 SVG v5 -->
+  <!-- 智引 SVG v5 -->
   <svg class="xb-svg idle" id="pika" viewBox="0 0 100 120" width="86"
        overflow="visible" xmlns="http://www.w3.org/2000/svg">
     <defs>
@@ -454,6 +455,7 @@
     };
     micFanBtn.addEventListener('pointerup',     stopRec);
     micFanBtn.addEventListener('pointercancel', stopRec);
+    micFanBtn.addEventListener('pointerleave',  stopRec);
 
     // 文字按钮 → 显示/隐藏输入框
     shadow.getElementById('fbtn-txt').addEventListener('click', (e) => {
@@ -483,6 +485,14 @@
     // 点击 widget 外部 → 收起扇形
     document.addEventListener('click', (e) => {
       if (!e.composedPath().includes(widgetHost)) closeFan();
+    });
+
+    // 首次使用引导
+    chrome.storage.local.get(['onboardingShown'], (data) => {
+      if (!data.onboardingShown) {
+        showSpeechBubble('按住麦克风说话，让我帮你导航');
+        chrome.storage.local.set({ onboardingShown: true });
+      }
     });
   }
 
@@ -566,6 +576,7 @@
 
       case 'STATUS_TEXT':
         setWidgetState(payload.state || 'idle');
+        if (payload.text && payload.state !== 'idle') showSpeechBubble(payload.text, null);
         sendResponse({ ok: true });
         break;
 
@@ -593,7 +604,9 @@
       case 'DOM_PRECOLLECT':
         // 按下麦克风时触发，与录音并行运行，结果缓存在 DomDistiller 内部
         // 后续 DOM_DISTILL 会复用这份缓存，省去重复 DOM 扫描
-        try { DomDistiller.precollect(document); } catch (_) {}
+        try { DomDistiller.precollect(document); } catch (e) {
+          console.warn('[Content] DOM precollect failed:', e.message);
+        }
         sendResponse({ ok: true });
         break;
 
@@ -642,6 +655,33 @@
         showSpeechBubble(payload.text, payload.selector);
         sendResponse({ success: true });
         break;
+
+      case 'TTS_TEXT': {
+        // 用 Web Speech API 播报英文，选高质量语音
+        const speak = () => {
+          const utterance = new SpeechSynthesisUtterance(payload.text);
+          utterance.lang = 'en-US';
+          utterance.rate = 0.9;
+          utterance.pitch = 1.0;
+          utterance.volume = 1.0;
+          const voices = speechSynthesis.getVoices();
+          // 优先选 macOS 上的优质英文语音
+          const preferred = voices.find(v => /Samantha|Karen|Alex|Daniel|Moira|Tessa/i.test(v.name) && v.lang.startsWith('en'))
+                        || voices.find(v => v.lang.startsWith('en'))
+                        || voices.find(v => v.lang.startsWith('en-US'));
+          if (preferred) utterance.voice = preferred;
+          speechSynthesis.cancel();
+          speechSynthesis.speak(utterance);
+        };
+        // voices 可能还没加载完，等一帧确保语音列表就绪
+        if (speechSynthesis.getVoices().length === 0) {
+          speechSynthesis.onvoiceschanged = () => { speechSynthesis.onvoiceschanged = null; speak(); };
+        } else {
+          speak();
+        }
+        sendResponse({ ok: true });
+        break;
+      }
 
       case 'TTS_PLAY': {
         // 播放 Service Worker 传来的 TTS 音频（SiliconFlow CosyVoice）
@@ -701,6 +741,21 @@
 
     highlightClickDismiss = () => clearHighlight();
     document.addEventListener('click', highlightClickDismiss, { once: true, capture: true });
+
+    // 滚动/缩放时跟踪高亮位置
+    if (_highlightTrackRaf) cancelAnimationFrame(_highlightTrackRaf);
+    const track = () => {
+      if (!highlightEl || !highlightTargetEl) { _highlightTrackRaf = null; return; }
+      // 目标元素被 JS 从 DOM 移除时（引用还在但已不在文档中），停止跟踪
+      if (!document.contains(highlightTargetEl)) { clearHighlight(); return; }
+      const r = highlightTargetEl.getBoundingClientRect();
+      highlightEl.style.left   = (r.left - 4) + 'px';
+      highlightEl.style.top    = (r.top  - 4) + 'px';
+      highlightEl.style.width  = (r.width  + 8) + 'px';
+      highlightEl.style.height = (r.height + 8) + 'px';
+      _highlightTrackRaf = requestAnimationFrame(track);
+    };
+    _highlightTrackRaf = requestAnimationFrame(track);
   }
 
   function spawnRipple(rect) {
@@ -718,6 +773,7 @@
   }
 
   function clearHighlight() {
+    if (_highlightTrackRaf) { cancelAnimationFrame(_highlightTrackRaf); _highlightTrackRaf = null; }
     if (highlightEl) { highlightEl.remove(); highlightEl = null; }
     highlightTargetEl = null;
     if (highlightClickDismiss) {
@@ -815,37 +871,47 @@
   }
 
   // ─────────────────────────────────────────────
-  // 语音气泡
+  // 语音气泡 — 统一从皮卡丘 Widget 右侧弹出
   // ─────────────────────────────────────────────
 
-  function showSpeechBubble(text, selector) {
+  function showSpeechBubble(text, _selector) {
+    if (!text || !widgetHost) return;
     if (speechBubble) { speechBubble.remove(); speechBubble = null; }
 
-    speechBubble = document.createElement('div');
-    speechBubble.className = 'dhn-speech-bubble';
-    speechBubble.textContent = text;
+    const hostRect = widgetHost.getBoundingClientRect();
+    const bubble = document.createElement('div');
+    bubble.className = 'dhn-widget-bubble';
+    bubble.textContent = text;
+    speechBubble = bubble;
 
-    if (selector) {
-      const target = document.querySelector(selector);
-      if (target) {
-        const rect = target.getBoundingClientRect();
-        speechBubble.style.left = rect.left + 'px';
-        speechBubble.style.top  = (rect.top - 48) + 'px';
-      } else {
-        positionCenter(speechBubble);
-      }
-    } else {
-      positionCenter(speechBubble);
+    // 默认：Widget 右侧，垂直居中于皮卡丘头部高度（host 约 110px，头部在 ~40% 处）
+    let left = hostRect.right + 10;
+    let top = hostRect.top + hostRect.height * 0.4;
+
+    // 贴近右边缘时翻转到左侧（竖排气泡窄，约 60px 宽）
+    if (left + 60 > window.innerWidth - 16) {
+      left = hostRect.left - 70;
     }
 
-    document.body.appendChild(speechBubble);
-    setTimeout(() => { if (speechBubble) { speechBubble.remove(); speechBubble = null; } }, 5000);
-  }
+    // 不超出上下边界（竖排最高 220px，半高 110px 留余量）
+    top = Math.max(120, Math.min(top, window.innerHeight - 120));
 
-  function positionCenter(el) {
-    el.style.left      = '50%';
-    el.style.top       = '20%';
-    el.style.transform = 'translate(-50%, -50%)';
+    bubble.style.left = left + 'px';
+    bubble.style.top  = top + 'px';
+
+    document.body.appendChild(bubble);
+
+    requestAnimationFrame(() => {
+      bubble.classList.add('visible');
+    });
+
+    setTimeout(() => {
+      bubble.classList.remove('visible');
+      bubble.addEventListener('transitionend', () => {
+        bubble.remove();
+        if (speechBubble === bubble) speechBubble = null;
+      });
+    }, 5000);
   }
 
   function clearAll() {

@@ -35,7 +35,7 @@ export async function transcribe(audioBase64, mimeType, apiKey, endpoint) {
   const form = new FormData();
   form.append('file', blob, `recording.${ext}`);
   form.append('model', 'FunAudioLLM/SenseVoiceSmall');
-  form.append('language', 'zh');
+  // 不传 language 参数，Whisper 自动检测语种
 
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), 10000);
